@@ -1,3 +1,9 @@
+// This module is implementation of
+// https://www.weinzierl.de/images/download/products/870/KnxBAOS_Protocol.pdf
+// ObjectServer Protocol v1.3
+// Should work with BAOS 870 modules
+
+
 /*** 
   To compose/process OS_ requests/responses
   Following methods will be supported by this class:
@@ -25,8 +31,8 @@ enum OS_Services {
   GetServerItemRes = 0x81,
   SetServerItemReq = 0x02,
   SetServerItemRes = 0x82,
-  GetDatapointDescriptionReq = 0x03,
-  GetDatapointDescriptionRes = 0x83,
+  GetDatapointDescriptionReq = 0x08, // GetDatapoointDescriptionV2 actually
+  GetDatapointDescriptionRes = 0x88,
   GetDatapointValueReq = 0x05,
   GetDatapointValueRes = 0x85,
   SetDatapointValueReq = 0x06,
@@ -59,7 +65,7 @@ enum OS_DatapointValueCommand {
 }
 
 struct OS_DatapointValue  {
-  ushort id;
+  ubyte id;
   ubyte state;
   ubyte length;
   OS_DatapointValueCommand command;
@@ -67,13 +73,13 @@ struct OS_DatapointValue  {
 }
 
 struct OS_ServerItem  {
-  ushort id;
+  ubyte id;
   ubyte length;
   ubyte[] value;
 }
 
 enum OS_DatapointType {
-  unknown,
+  unknown = 0,
   dpt1 = 1,
   dpt2 = 2,
   dpt3 = 3,
@@ -112,7 +118,7 @@ struct OS_ConfigFlags {
 };
 
 struct OS_DatapointDescription {
-  ushort id;
+  ubyte id;
   ubyte length;
   OS_DatapointType type;
   OS_ConfigFlags flags;
@@ -150,7 +156,7 @@ class OS_Protocol {
     // current position in message
     int i = 0;
     while(data.length > 0) {
-      ushort id = data.read!ushort();
+      ubyte id = data.read!ubyte();
       ubyte value_length = data.read!ubyte();
       ubyte[] _value = data[0..value_length];
 
@@ -185,13 +191,14 @@ class OS_Protocol {
     int count = 0;
     // current position in message
     while(data.length > 0) {
-      ushort id = data.read!ushort();
+      // TODO: no id, calculate by start/end
+      //ubyte id = data.read!ubyte();
       ubyte value_type = data.read!ubyte();
       ubyte config_flags = data.read!ubyte();
       ubyte dpt = data.read!ubyte();
 
       OS_DatapointDescription _result;
-      _result.id = id;
+      //_result.id = id;
       _result.flags.priority = to!OS_DatapointPriority(config_flags & 0x03);
       _result.flags.communication = (config_flags & 0x04) != 0;
       _result.flags.read = (config_flags & 0x08) != 0;
@@ -259,9 +266,10 @@ class OS_Protocol {
     // current position in message
     int i = 0;
     while(data.length > 0) {
-      ushort id = data.read!ushort();
-      ubyte value_state = data.read!ubyte();
-      ubyte value_length = data.read!ubyte();
+      ubyte id = data.read!ubyte();
+      ubyte value_state_length = data.read!ubyte();
+      ubyte value_state = value_state_length >> 4;
+      ubyte value_length = value_state_length & 0b1111;
 
       ubyte[] _value = data[0..value_length];
 
@@ -289,8 +297,8 @@ class OS_Protocol {
 
   private static void _assertSuccess(ubyte[] data) {
     // start dp[2], number of dp[2], (err[1]/value[~varies])
-    ushort start = data.read!ushort();
-    ushort number = data.read!ushort();
+    ubyte start = data.read!ubyte();
+    ubyte number = data.read!ubyte();
     ubyte error = data.read!ubyte();
     // 0 = No error
     if (number == 0 && error != 0) {
@@ -301,21 +309,21 @@ class OS_Protocol {
   private static OS_ServerItem[] _processServerItemRes(ubyte[] data) {
     _assertSuccess(data);
 
-    return _processServerItems(data[2*ushort.sizeof..$]);
+    return _processServerItems(data[2*ubyte.sizeof..$]);
   }
 
   private static OS_DatapointValue[] _processDatapointValueRes(ubyte[] data) {
     // start dp[2], number of dp[2], (err[1]/value[~varies])
     _assertSuccess(data);
 
-    return _processCommonDatapointValues(data[2*ushort.sizeof..$]);
+    return _processCommonDatapointValues(data[2*ubyte.sizeof..$]);
   }
 
   private static OS_DatapointDescription[] _processGetDatapointDescriptionRes(ubyte[] data) {
     // start dp[2], number of dp[2], (err[1]/value[~varies])
     _assertSuccess(data);
 
-    return _processCommonDatapointDescriptions(data[2*ushort.sizeof..$]);
+    return _processCommonDatapointDescriptions(data[2*ubyte.sizeof..$]);
   }
 
   static OS_Message processIncomingMessage(ubyte[] data) {
@@ -380,61 +388,61 @@ class OS_Protocol {
     return result;
   }
 
-  static ubyte[] GetDatapointDescriptionReq(ushort start, ushort number = 1) {
+  static ubyte[] GetDatapointDescriptionReq(ubyte start, ubyte number = 1) {
     ubyte[] result;
     // max len
-    result.length = 6;
+    result.length = 4;
     // service header
     result.write!ubyte(OS_MainService, 0);
     result.write!ubyte(OS_Services.GetDatapointDescriptionReq, 1);
     // start BE
-    result.write!ushort(start, 2);
+    result.write!ubyte(start, 2);
     // number BE
-    result.write!ushort(number, 4);
+    result.write!ubyte(number, 3);
 
     return result;
   }
 
-  static ubyte[] GetDatapointValueReq(ushort start, ushort number = 1, OS_DatapointValueFilter filter = OS_DatapointValueFilter.all) {
+  static ubyte[] GetDatapointValueReq(ubyte start, ubyte number = 1, OS_DatapointValueFilter filter = OS_DatapointValueFilter.all) {
     ubyte[] result;
     // max len
-    result.length = 7;
+    result.length = 4;
     // service header
     result.write!ubyte(OS_MainService, 0);
     result.write!ubyte(OS_Services.GetDatapointValueReq, 1);
     // start BE
-    result.write!ushort(start, 2);
+    result.write!ubyte(start, 2);
     // number BE
-    result.write!ushort(number, 4);
-    result.write!ubyte(cast(ubyte)filter, 6);
+    result.write!ubyte(number, 3);
+    //result.write!ubyte(cast(ubyte)filter, 4);
 
     return result;
   }
 
-  static ubyte[] GetServerItemReq(ushort start, ushort number = 1) {
+  static ubyte[] GetServerItemReq(ubyte start, ubyte number = 1) {
     ubyte[] result;
     // max len
-    result.length = 6;
+    result.length = 4;
     // service header
     result.write!ubyte(OS_MainService, 0);
     result.write!ubyte(OS_Services.GetServerItemReq, 1);
     // start BE
-    result.write!ushort(start, 2);
+    result.write!ubyte(start, 2);
     // number BE
-    result.write!ushort(number, 4);
+    result.write!ubyte(number, 3);
 
     return result;
   }
   static ubyte[] SetDatapointValueReq(OS_DatapointValue[] values) {
     ubyte[] result;
     // max len
-    ubyte header_length = 6;
+    ubyte header_length = 4;
     ubyte value_length = 0;
     // as max as possible. anyway, max datapoint id is 1000;
-    ushort start = 65535;
+    ubyte start = 255;
     foreach(OS_DatapointValue value; values) {
-      // id, cmd, len, value
-      value_length += ushort.sizeof + ubyte.sizeof + ubyte.sizeof+ value.value.length;
+      // id, cmd+len, value
+      value_length += ubyte.sizeof + ubyte.sizeof+ value.value.length;
       // get min from values
       if (value.id < start) {
         start = value.id;
@@ -446,24 +454,25 @@ class OS_Protocol {
     result.write!ubyte(OS_MainService, 0);
     result.write!ubyte(OS_Services.SetDatapointValueReq, 1);
     // start BE
-    result.write!ushort(start, 2);
+    result.write!ubyte(start, 2);
     // number BE
-    ushort number = cast(ushort) values.length;
-    result.write!ushort(number, 4);
+    ubyte number = cast(ubyte) values.length;
+    result.write!ubyte(number, 3);
 
     // current position
     int c = header_length; 
     foreach(OS_DatapointValue value; values) {
-      result.write!ushort(value.id, c);
+      result.write!ubyte(value.id, c);
       // command: set, send, set and send, read 
-      ubyte command = cast(ubyte) value.command;
-      result.write!ubyte(command, c + 2);
+      ubyte command_length = cast(ubyte) (value.command << 4);
+      command_length = command_length | (value.value.length & 0b1111);
+      result.write!ubyte(command_length, c + 1);
 
-      result.write!ubyte(cast(ubyte) value.value.length, c + 3);
+      // result.write!ubyte(cast(ubyte) value.value.length, c + 2);
 
       // end position of value chunk
-      int end = c+4 + cast(int) value.value.length;
-      result[c+4..end] = value.value[0..$];
+      int end = c+2 + cast(int) value.value.length;
+      result[c+2..end] = value.value[0..$];
       c = end;
     }
 
@@ -472,13 +481,13 @@ class OS_Protocol {
   static ubyte[] SetServerItemReq(OS_ServerItem[] items) {
     ubyte[] result;
     // max len
-    ubyte header_length = 6;
+    ubyte header_length = 4;
     ubyte value_length = 0;
     // as max as possible
-    ushort start = 65535;
+    ubyte start = 255;
     foreach(item; items) {
       // id, len, value
-      value_length += ushort.sizeof + ubyte.sizeof+ item.value.length;
+      value_length += ubyte.sizeof + ubyte.sizeof+ item.value.length;
       // get min from values
       if (item.id < start) {
         start = item.id;
@@ -490,20 +499,20 @@ class OS_Protocol {
     result.write!ubyte(OS_MainService, 0);
     result.write!ubyte(OS_Services.SetServerItemReq, 1);
     // start BE
-    result.write!ushort(start, 2);
+    result.write!ubyte(start, 2);
     // number BE
-    ushort number = cast(ushort) items.length;
-    result.write!ushort(number, 4);
+    ubyte number = cast(ubyte) items.length;
+    result.write!ubyte(number, 3);
 
     // current position
     int c = header_length; 
     foreach(item; items) {
-      result.write!ushort(item.id, c);
-      result.write!ubyte(cast(ubyte) item.value.length, c + 2);
+      result.write!ubyte(item.id, c);
+      result.write!ubyte(cast(ubyte) item.value.length, c + 1);
 
       // end position of value chunk
-      int end = c+3 + cast(int) item.value.length;
-      result[c+3..end] = item.value[0..$];
+      int end = c+2 + cast(int) item.value.length;
+      result[c+2..end] = item.value[0..$];
       c = end;
     }
 

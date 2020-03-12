@@ -87,6 +87,8 @@ class Baos {
     {
       ubyte[] chunk = cast(ubyte[]) tmp;
 
+      writefln("incoming serial data: [%(0x%x, %)].", chunk);
+
       ft12.parse(chunk);
     }
 
@@ -146,6 +148,7 @@ class Baos {
       request.parity = currentParity;
       request.payload = message[0..$];
       ubyte[] buffer = ft12.compose(request);
+      writefln("request to BAOS: [%(0x%x, %)].", buffer);
       com.write(buffer);
       sw.reset();
       sw.start();
@@ -156,6 +159,7 @@ class Baos {
           processIncomingInterrupts();
           processResponseTimeout();
           if (_resetInd) {
+            writeln("Reset ind");
             _response.success = false;
             _response.service = OS_Services.unknown;
             _response.error = Errors.interrupted;
@@ -172,6 +176,7 @@ class Baos {
             _ackReceived = true;
           }
           if (_timeout) {
+            writeln("common req timeout");
             _response.success = false;
             _response.service = OS_Services.unknown;
             _response.error = Errors.timeout;
@@ -200,13 +205,13 @@ class Baos {
     return result;
     ***/
   }
-  public OS_Message GetDatapointDescriptionReq(ushort start, ushort number = 1) {
+  public OS_Message GetDatapointDescriptionReq(ubyte start, ubyte number = 1) {
     return commonRequest(OS_Protocol.GetDatapointDescriptionReq(start, number));
   }
-  public OS_Message GetServerItemReq(ushort start, ushort number = 1) {
+  public OS_Message GetServerItemReq(ubyte start, ubyte number = 1) {
     return commonRequest(OS_Protocol.GetServerItemReq(start, number));
   }
-  public OS_Message GetDatapointValueReq(ushort start, ushort number = 1) {
+  public OS_Message GetDatapointValueReq(ubyte start, ubyte number = 1) {
     return commonRequest(OS_Protocol.GetDatapointValueReq(start, number));
   }
   public OS_Message SetDatapointValueReq(OS_DatapointValue[] values) {
@@ -221,16 +226,23 @@ class Baos {
   }
 
   public void reset() {
+    writeln("Sending reset req");
     // send reset request
     FT12Frame resetFrame;
     resetFrame.type = FT12FrameType.resetReq;
     ubyte[] resetReqBuffer = ft12.compose(resetFrame);
 
     com.write(resetReqBuffer);
+    writefln("Reset request [%(0x%x, %)].", resetReqBuffer);
 
     // init var
     _resetInd = false;
     _resetAckReceived = false;
+    
+    // reset timer
+    sw.reset();
+    sw.start();
+
     // and wait until it is received
     while(!(_resetAckReceived || _interrupted || _resetInd || _timeout)) {
       processIncomingData();
@@ -254,7 +266,7 @@ class Baos {
   }
 
   // constructor
-  this(string device = "/dev/ttyS1", string params = "19200:8E1", int req_timeout = 300) {
+  this(string device = "/dev/ttyS1", string params = "19200:8E1", int req_timeout = 500) {
     com = new SerialPortNonBlk(device, params);
     this.req_timeout = req_timeout;
     this.sw = StopWatch(AutoStart.no);

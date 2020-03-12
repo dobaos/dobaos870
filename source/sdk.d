@@ -6,6 +6,7 @@ module sdk;
 
 import core.thread;
 import std.algorithm;
+import std.conv;
 import std.stdio;
 import std.bitmanip;
 import std.range.primitives : empty;
@@ -19,7 +20,7 @@ import baos;
 import errors;
 
 const ushort MIN_DATAPOINT_NUM = 1;
-const ushort MAX_DATAPOINT_NUM = 1000;
+const ushort MAX_DATAPOINT_NUM = 250;
 
 class DatapointSdk {
   private ushort SI_currentBufferSize;
@@ -111,7 +112,7 @@ class DatapointSdk {
       throw Errors.wrong_payload_type;
     }
 
-    auto id = cast(ushort) value["id"].integer;
+    auto id = cast(ubyte) value["id"].integer;
     if ((id in descriptions) is null) {
       throw Errors.datapoint_not_found;
     }
@@ -637,7 +638,7 @@ class DatapointSdk {
   public JSONValue getValue(JSONValue payload) {
     JSONValue res = parseJSON("{}");
     if (payload.type() == JSONType.integer) {
-      ushort id = cast(ushort) payload.integer;
+      ubyte id = cast(ubyte) payload.integer;
       if(id < MIN_DATAPOINT_NUM || id > MAX_DATAPOINT_NUM) {
         throw Errors.datapoint_out_of_bounds;
       }
@@ -654,7 +655,7 @@ class DatapointSdk {
     } else if (payload.type() == JSONType.array) {
       // sort array, create new with uniq numbers
       // then calculate length to cover maximum possible values
-      ushort[] idUshort;
+      ubyte[] idUshort;
       idUshort.length = payload.array.length;
       auto count = 0;
       if(payload.array.length == 0) {
@@ -665,7 +666,7 @@ class DatapointSdk {
         if(jid.type() != JSONType.integer) {
           throw Errors.wrong_payload;
         }
-        ushort id = cast(ushort) jid.integer;
+        ubyte id = cast(ubyte) jid.integer;
         if(id < MIN_DATAPOINT_NUM || id > MAX_DATAPOINT_NUM) {
           throw Errors.datapoint_out_of_bounds;
         }
@@ -678,7 +679,7 @@ class DatapointSdk {
       idUshort.sort();
 
       // generate array with no dublicated id numbers
-      ushort[] idUniq;
+      ubyte[] idUniq;
       // max length is payload len
       idUniq.length = idUshort.length;
       auto countUniq = 0;
@@ -714,11 +715,11 @@ class DatapointSdk {
       // even if they are not configured in ETS
       // and for them length is 1
       // so, 
-      ushort id = idUniq[currentIndex];
+      ubyte id = idUniq[currentIndex];
 
       // params for ObjectServer request
-      ushort start = id;
-      ushort number = 0;
+      ubyte start = id;
+      ubyte number = 0;
 
       // response count to fill array
       auto resCount = 0;
@@ -749,7 +750,7 @@ class DatapointSdk {
         // moving next
         if (currentLen < maxResLen + 1) {
           if (idUniq[currentIndex] == id) {
-            number = cast(ushort) (id - start);
+            number = cast(ubyte) (id - start);
             if (currentIndex == idUniq.length - 1) {
               number += 1;
               _getValues();
@@ -931,7 +932,7 @@ class DatapointSdk {
   public JSONValue readValue(JSONValue payload) {
     JSONValue res;
     if (payload.type() == JSONType.integer) {
-      ushort id = cast(ushort) payload.integer;
+      ubyte id = cast(ubyte) payload.integer;
       if(id < MIN_DATAPOINT_NUM || id > MAX_DATAPOINT_NUM) {
         throw Errors.datapoint_out_of_bounds;
       }
@@ -969,7 +970,7 @@ class DatapointSdk {
         if(jid.type() != JSONType.integer) {
           throw Errors.wrong_payload_type;
         }
-        ushort id = cast(ushort) jid.integer;
+        ubyte id = cast(ubyte) jid.integer;
         if(id < MIN_DATAPOINT_NUM || id > MAX_DATAPOINT_NUM) {
           throw Errors.datapoint_out_of_bounds;
         }
@@ -1237,16 +1238,25 @@ class DatapointSdk {
     // calculate max num of dps in one response
     // GetDatapointDescriptionRes has a header(6b) and 5bytes each dp
     // so, incoming message can contain descr for following num of dpts:
-    ushort number = cast(ushort)(SI_currentBufferSize - 6)/5;
-    ushort start = 1;
+    // ubyte number = 1;
+    ubyte number = cast(ubyte)(SI_currentBufferSize - 6)/5;
+
+    ubyte start = 1;
     while(start < MAX_DATAPOINT_NUM ) {
       if (MAX_DATAPOINT_NUM - start <= number) {
-        number = cast(ushort) (MAX_DATAPOINT_NUM - start + 1);
+        number = cast(ubyte) (MAX_DATAPOINT_NUM - start + 1);
       }
+      ushort i = 0;
       auto descr = baos.GetDatapointDescriptionReq(start, number);
       if (descr.success && descr.service == OS_Services.GetDatapointDescriptionRes) {
         foreach(OS_DatapointDescription dd; descr.datapoint_descriptions) {
-          descriptions[dd.id] = dd;
+          ushort id = to!ushort(start + i);
+          i += 1;
+          if (dd.type == OS_DatapointType.unknown) {
+            continue;
+          }
+          descriptions[id] = dd;
+          descriptions[id].id = to!ubyte(id);
           count++;
         }
       } else  if (!descr.success && descr.service == OS_Services.GetDatapointDescriptionRes) {
@@ -1270,7 +1280,6 @@ class DatapointSdk {
   }
   public void resetBaos() {
     baos.reset();
-    baos.switch2BAOS();
   }
 
   // on incoming reset req. ETS download/bus dis and then -connected
