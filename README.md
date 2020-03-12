@@ -1,4 +1,4 @@
-## dobaos
+## dobaos870
 
 ## Requirements
 
@@ -9,7 +9,7 @@ sudo apt install redis-server
 ```
 
 * UART enabled
-* Weinzierl KNX BAOS 83x module connected to UART.
+* Weinzierl KNX BAOS 870 serial module connected to rs232 hat.
 * nodejs - for dobaos.tool.
 
 ```text
@@ -32,8 +32,8 @@ then follow on-screen instructions
 after installing and activating ldc environment, clone and compile this repo
 
 ```text
-git clone https://github.com/dobaos/dobaos.git
-cd ./dobaos
+git clone https://github.com/dobaos/dobaos870.git
+cd ./dobaos870
 dub
 ```
 
@@ -41,16 +41,16 @@ if everything is ok, process will start. Stop it and proceed next.
 
 If you can't compile source by yourself(ldc2 can't be installed on Raspberry Pi3, so cross-compilation tool should be used), compiled versions for NanoPi Neo Core2 and Raspberry Pi 3 can be found on [google drive](https://drive.google.com/drive/folders/1LxJj-hWxdFW1As1zJIehzDWGsSe2RmR9?usp=sharing).
 
-If you downloaded binary from google drive, then put it to user home folder on your single board computer. If you are working on linux/macOS do it with help of scp or sshfs(which I recommend as a convenient way to work with remote filesystem). For Windows take a look at [billziss-gh/sshfs-win](https://github.com/billziss-gh/sshfs-win). After you copied file to home folder, do ssh login and put this file to `/usr/local/bin/dobaos`.
+If you downloaded binary from google drive, then put it to user home folder on your single board computer. If you are working on linux/macOS do it with help of scp or sshfs(which I recommend as a convenient way to work with remote filesystem). For Windows take a look at [billziss-gh/sshfs-win](https://github.com/billziss-gh/sshfs-win). After you copied file to home folder, do ssh login and put this file to `/usr/local/bin/dobaos870`.
 
 Assuming binary name in user home folder is `dobaos`. Give it permission to run at first, and copy to global bin directory:
 
 ```text
-chmod +x ./dobaos
-sudo cp ./dobaos /usr/local/bin/dobaos
+chmod +x ./dobaos870
+sudo cp ./dobaos870 /usr/local/bin/dobaos870
 ```
 
-so, now you are able to run it with just `dobaos` command.
+so, now you are able to run it with just `dobaos870` command.
 
 Since version 10\_mar\_2020 default device is /dev/ttyAMA0 and all config now is stored at redis database. At a first run, dobaos service creates all needed keys there. Default config prefix is `dobaos_config_`. It can be changed with command line argument `--config_prefix`/`-c`.
 
@@ -98,7 +98,7 @@ After=redis.service
 
 [Service]
 User=pi
-ExecStart=/usr/bin/env dobaos
+ExecStart=/usr/bin/env dobaos870
 Restart=on-failure
 RestartSec=10
 
@@ -130,7 +130,7 @@ Use command `version` inside tool interface to check that main service is up and
 
 ## General info
 
-This app provides software interface to work with Weinzierl BAOS modules(830/838 kBerry/..). 
+This app provides software interface to work with Weinzierl BAOS module 870 serial. 
 
 What this process do, step by step:
 
