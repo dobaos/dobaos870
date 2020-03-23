@@ -584,7 +584,14 @@ class DatapointSdk {
 
   public JSONValue getDescription(JSONValue payload) {
     JSONValue res;
-    if(payload.type() == JSONType.null_) {
+    if(payload.type() == JSONType.null_ || 
+        payload.type() == JSONType.string) {
+      if (payload.type() == JSONType.string) {
+        if (payload.str != "*") {
+          throw Errors.wrong_payload;
+        }
+      }
+
       // return all descriptions
       JSONValue allDatapointId = parseJSON("[]");
       allDatapointId.array.length = descriptions.keys.length;
